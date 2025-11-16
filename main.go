@@ -55,16 +55,14 @@ type ErrorInfo struct {
 }
 
 func main() {
-	autoCommit := flag.Bool("c", false, "Auto-commit with generated message")
+	autoCommit := flag.Bool("c", false, "")
 	flag.Parse()
 
-	// Check if we're in a git repository
 	if !isGitRepo() {
 		fmt.Fprintln(os.Stderr, "❌ Not a git repository")
 		os.Exit(1)
 	}
 
-	// Get API key from environment
 	apiKey := os.Getenv("GOOGLE_AI_TOKEN")
 	if apiKey == "" {
 		fmt.Fprintln(os.Stderr, "❌ GOOGLE_AI_TOKEN environment variable not set")
@@ -72,7 +70,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Get git diff
 	diff, err := getGitDiff()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Error getting git diff: %v\n", err)
@@ -86,41 +83,31 @@ func main() {
 
 	fmt.Println("🎲 Generating creative commit message...")
 
-	// Generate commit message
 	commitMsg, err := generateCreativeCommit(apiKey, diff)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Error generating commit: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Display the generated commit message
 	fmt.Println("\n" + commitMsg + "\n")
 
 	if *autoCommit {
-		// Stage all changes if nothing is staged
-		cmd := exec.Command("git", "diff", "--cached", "--quiet")
-		if cmd.Run() != nil {
-			// Nothing staged, stage all changes
-			fmt.Println("📦 Staging changes...")
-			cmd = exec.Command("git", "add", ".")
-			if err := cmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "❌ Error staging changes: %v\n", err)
-				os.Exit(1)
-			}
+		cmd := exec.Command("git", "diff", "--cached")
+		output, _ := cmd.Output()
+		if strings.TrimSpace(string(output)) == "" {
+			fmt.Fprintln(os.Stderr, "❌ No staged changes. Run 'git add' first")
+			os.Exit(1)
 		}
 
-		// Commit with the generated message
-		fmt.Println("🚀 Committing...")
 		cmd = exec.Command("git", "commit", "-m", commitMsg)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Error committing: %v\n%s\n", err, output)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Committed successfully!")
+		fmt.Println("✅ Committed!")
 		fmt.Println(string(output))
 	} else {
-		// Copy to clipboard
 		err = copyToClipboard(commitMsg)
 		if err != nil {
 			fmt.Printf("📋 Could not copy to clipboard: %v\n", err)
@@ -137,7 +124,6 @@ func isGitRepo() bool {
 }
 
 func getGitDiff() (string, error) {
-	// Try staged changes first
 	cmd := exec.Command("git", "diff", "--cached")
 	output, err := cmd.Output()
 	if err != nil {
@@ -149,7 +135,6 @@ func getGitDiff() (string, error) {
 		return stagedDiff, nil
 	}
 
-	// If no staged changes, get unstaged changes
 	cmd = exec.Command("git", "diff")
 	output, err = cmd.Output()
 	if err != nil {
@@ -161,7 +146,6 @@ func getGitDiff() (string, error) {
 		return unstagedDiff, nil
 	}
 
-	// Check for untracked files
 	cmd = exec.Command("git", "ls-files", "--others", "--exclude-standard")
 	output, err = cmd.Output()
 	if err != nil {
