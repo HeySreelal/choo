@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,6 +55,9 @@ type ErrorInfo struct {
 }
 
 func main() {
+	autoCommit := flag.Bool("c", false, "Auto-commit with generated message")
+	flag.Parse()
+
 	// Check if we're in a git repository
 	if !isGitRepo() {
 		fmt.Fprintln(os.Stderr, "❌ Not a git repository")
@@ -92,12 +96,37 @@ func main() {
 	// Display the generated commit message
 	fmt.Println("\n" + commitMsg + "\n")
 
-	// Copy to clipboard
-	err = copyToClipboard(commitMsg)
-	if err != nil {
-		fmt.Printf("📋 Could not copy to clipboard: %v\n", err)
+	if *autoCommit {
+		// Stage all changes if nothing is staged
+		cmd := exec.Command("git", "diff", "--cached", "--quiet")
+		if cmd.Run() != nil {
+			// Nothing staged, stage all changes
+			fmt.Println("📦 Staging changes...")
+			cmd = exec.Command("git", "add", ".")
+			if err := cmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Error staging changes: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		// Commit with the generated message
+		fmt.Println("🚀 Committing...")
+		cmd = exec.Command("git", "commit", "-m", commitMsg)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Error committing: %v\n%s\n", err, output)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Committed successfully!")
+		fmt.Println(string(output))
 	} else {
-		fmt.Println("📋 Copied to clipboard!")
+		// Copy to clipboard
+		err = copyToClipboard(commitMsg)
+		if err != nil {
+			fmt.Printf("📋 Could not copy to clipboard: %v\n", err)
+		} else {
+			fmt.Println("📋 Copied to clipboard!")
+		}
 	}
 }
 
